@@ -2,6 +2,7 @@
 #include<cstring>
 #include<cstdio>
 #include<map>
+#include<unordered_set>
 #include<vector>
 #include<string>
 #include<ctime>
@@ -51,6 +52,8 @@ char buf[100000], buf1[100000];
 int relation_num, entity_num;
 map<string, int> relation2id, entity2id;
 map<int, string> id2entity, id2relation;
+unordered_set<int> entities;
+unordered_set<int> relations;
 
 
 map<int, map<int, int> > left_entity, right_entity;
@@ -73,28 +76,41 @@ public:
       rate = rate_in;
       margin = margin_in;
       method = method_in;
-      relation_vec.resize(relation_num);
-      for (int i = 0; i < relation_vec.size(); i++)
-        relation_vec[i].resize(n);
-      entity_vec.resize(entity_num);
-      for (int i = 0; i < entity_vec.size(); i++)
-        entity_vec[i].resize(n);
-      relation_tmp.resize(relation_num);
-      for (int i = 0; i < relation_tmp.size(); i++)
-        relation_tmp[i].resize(n);
-      entity_tmp.resize(entity_num);
-      for (int i = 0; i < entity_tmp.size(); i++)
-        entity_tmp[i].resize(n);
-      for (int i = 0; i < relation_num; i++) {
-        for (int ii = 0; ii < n; ii++)
-          relation_vec[i][ii] = randn(0, 1.0 / n, -6 / sqrt(n), 6 / sqrt(n));
-      }
-      for (int i = 0; i < entity_num; i++) {
-        for (int ii = 0; ii < n; ii++)
-          entity_vec[i][ii] = randn(0, 1.0 / n, -6 / sqrt(n), 6 / sqrt(n));
-        norm(entity_vec[i]);
-      }
 
+      relation_vec.resize(relation_num);
+      for (auto it = relations.cbegin(); it != relations.cend(); ++it)
+        relation_vec[*it].resize(n);
+			cout << "relation_vec resized" << endl;
+
+      entity_vec.resize(entity_num);
+      for (auto it = entities.cbegin(); it != entities.cend(); ++it)
+        entity_vec[*it].resize(n);
+			cout << "entity_vec resized" << endl;
+
+      relation_tmp.resize(relation_num);
+      for (auto it = relations.cbegin(); it != relations.cend(); ++it)
+        relation_tmp[*it].resize(n);
+			cout << "relation_tmp resized" << endl;
+
+      entity_tmp.resize(entity_num);
+      for (auto it = entities.cbegin(); it != entities.cend(); ++it)
+        entity_tmp[*it].resize(n);
+			cout << "entity_tmp resized" << endl;
+
+      for (auto it = relations.cbegin(); it != relations.cend(); ++it) {
+        for (int ii = 0; ii < n; ii++)
+          relation_vec[*it][ii] = randn(0, 1.0 / n, -6 / sqrt(n), 6 / sqrt(n));
+      }
+			cout << "relation_vec inited" << endl;
+
+      for (auto it = entities.cbegin(); it != entities.cend(); ++it) {
+        for (int ii = 0; ii < n; ii++)
+          entity_vec[*it][ii] = randn(0, 1.0 / n, -6 / sqrt(n), 6 / sqrt(n));
+        norm(entity_vec[*it]);
+      }
+			cout << "entity_vec inited" << endl;
+
+			cout << "start bfgs" << endl;
 
       bfgs();
     }
@@ -141,17 +157,22 @@ private:
           for (int k = 0; k < batchsize; k++) {
             int i = rand_max(fb_h.size());
             int j = rand_max(entity_num);
+
+						while(entities.find(j) == entities.end()) j = rand_max(entity_num);
+
             double pr = 1000 * right_num[fb_r[i]] / (right_num[fb_r[i]] + left_num[fb_r[i]]);
             if (method == 0)
               pr = 500;
             if (rand() % 1000 < pr) {
               while (ok[make_pair(fb_h[i], fb_r[i])].count(j) > 0)
                 j = rand_max(entity_num);
+								while(entities.find(j) == entities.end()) j = rand_max(entity_num);
               train_kb(fb_h[i], fb_l[i], fb_r[i], fb_h[i], j, fb_r[i]);
             }
             else {
               while (ok[make_pair(j, fb_r[i])].count(fb_l[i]) > 0)
                 j = rand_max(entity_num);
+								while(entities.find(j) == entities.end()) j = rand_max(entity_num);
               train_kb(fb_h[i], fb_l[i], fb_r[i], j, fb_l[i], fb_r[i]);
             }
             norm(relation_tmp[fb_r[i]]);
@@ -165,14 +186,14 @@ private:
         cout << "epoch:" << epoch << ' ' << res << endl;
         FILE *f2 = fopen(("relation2vec." + version).c_str(), "w");
         FILE *f3 = fopen(("entity2vec." + version).c_str(), "w");
-        for (int i = 0; i < relation_num; i++) {
+        for (auto it = relations.cbegin(); it != relations.cend(); ++it) {
           for (int ii = 0; ii < n; ii++)
-            fprintf(f2, "%.6lf\t", relation_vec[i][ii]);
+            fprintf(f2, "%.6lf\t", relation_vec[*it][ii]);
           fprintf(f2, "\n");
         }
-        for (int i = 0; i < entity_num; i++) {
+        for (auto it = entities.cbegin(); it != entities.cend(); ++it) {
           for (int ii = 0; ii < n; ii++)
-            fprintf(f3, "%.6lf\t", entity_vec[i][ii]);
+            fprintf(f3, "%.6lf\t", entity_vec[*it][ii]);
           fprintf(f3, "\n");
         }
         fclose(f2);
@@ -250,15 +271,29 @@ void prepare() {
   }
    */
 
-  FILE *f_kb = fopen("../data/train.txt", "r"); // our data uses id instead of str
+  FILE *f_kb = fopen("/home/bshi/tensorflow-socher-ntn/data/city_capital/train.txt", "r"); // our data uses id instead of str
 
-  int src, dst, rel;
-  while(fscanf(f_kb, "%d%d%d", src, dst, rel) == 1) {
+	if (!f_kb) cout << "train file does not exits" << endl;
+
+  int src, dst, rel, dump;
+
+	entity_num = 0;
+	relation_num = 0;
+
+  while(fscanf(f_kb, "%d%d%d%d", &src, &rel, &dst, &dump) == 4) {
+		if (dump == -1) continue;
+		entity_num = max(entity_num, max(src, dst) + 1);
+		relation_num = max(relation_num, rel + 1);
+
+		entities.insert(src);
+		entities.insert(dst);
+		relations.insert(rel);
+
     left_entity[rel][src]++;
     right_entity[rel][dst]++;
     train.add(src, dst, rel);
   }
-
+/*
   while (fscanf(f_kb, "%s", buf) == 1) {
     string s1 = buf;
     fscanf(f_kb, "%s", buf);
@@ -279,6 +314,7 @@ void prepare() {
     right_entity[relation2id[s3]][entity2id[s2]]++;
     train.add(entity2id[s1], entity2id[s2], relation2id[s3]);
   }
+	*/
 
   for(auto it = left_entity.begin(); it != left_entity.end(); ++it) {
     double sum1 = 0, sum2 = 0;
@@ -315,8 +351,8 @@ void prepare() {
     right_num[i] = sum2 / sum1;
   }
 */
-//  cout << "relation_num=" << relation_num << endl;
-//  cout << "entity_num=" << entity_num << endl;
+  cout << "relation_num=" << relation_num << endl;
+  cout << "entity_num=" << entity_num << endl;
   cout << "data loaded" << endl;
   fclose(f_kb);
 }
