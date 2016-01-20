@@ -187,11 +187,13 @@ private:
         FILE *f2 = fopen(("relation2vec." + version).c_str(), "w");
         FILE *f3 = fopen(("entity2vec." + version).c_str(), "w");
         for (auto it = relations.cbegin(); it != relations.cend(); ++it) {
+					fprintf(f2, "%d\t", *it);
           for (int ii = 0; ii < n; ii++)
             fprintf(f2, "%.6lf\t", relation_vec[*it][ii]);
           fprintf(f2, "\n");
         }
         for (auto it = entities.cbegin(); it != entities.cend(); ++it) {
+					fprintf(f3, "%d\t", *it);
           for (int ii = 0; ii < n; ii++)
             fprintf(f3, "%.6lf\t", entity_vec[*it][ii]);
           fprintf(f3, "\n");
